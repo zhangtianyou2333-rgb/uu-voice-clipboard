@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../UUVoiceClipboard.Native/KeyboardEntryPolicy.cs" Link="KeyboardEntryPolicy.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/VoiceWindowPolicy.cs" Link="VoiceWindowPolicy.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/WindowProcessCache.cs" Link="WindowProcessCache.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/PanelSessionPolicy.cs" Link="PanelSessionPolicy.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/PanelEntryPolicy.cs" Link="PanelEntryPolicy.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/NativeDiagnostics.cs" Link="NativeDiagnostics.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/FinishRequestPolicy.cs" Link="FinishRequestPolicy.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/CompositionStatePolicy.cs" Link="CompositionStatePolicy.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/EditorKeyMetadata.cs" Link="EditorKeyMetadata.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/EditorViewportPolicy.cs" Link="EditorViewportPolicy.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/ImeCompositionLayoutPolicy.cs" Link="ImeCompositionLayoutPolicy.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/WebEditorMessagePolicy.cs" Link="WebEditorMessagePolicy.cs" />
+    <Compile Include="../../UUVoiceClipboard.Native/WebEditorDocumentPolicy.cs" Link="WebEditorDocumentPolicy.cs" />
+  </ItemGroup>
+</Project>
