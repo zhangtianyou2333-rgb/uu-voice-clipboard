@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>UU 语音中转输入区</title>
+<style>
+  :root { color-scheme: dark; background: #191c1e; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+  textarea {
+    display: block; width: 100%; height: 100%; min-height: 0; resize: none;
+    padding: 6px 8px 10px 0; border: 0; outline: 0;
+    background: #191c1e; color: #f3f5ef; caret-color: #f3f5ef;
+    font: 11.5pt/1.65 "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto;
+    scrollbar-width: thin; scrollbar-color: #545e64 #191c1e;
+  }
+  textarea::-webkit-scrollbar { width: 6px; }
+  textarea::-webkit-scrollbar-track { background: #191c1e; }
+  textarea::-webkit-scrollbar-thumb { background: #545e64; border-radius: 3px; }
+  textarea::-webkit-scrollbar-thumb:hover { background: #899398; }
+</style>
+</head>
+<body>
+<textarea id="editor" aria-label="语音输入文字" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" wrap="soft" readonly></textarea>
+<script>
+(() => {
+  'use strict';
+  const editor = document.getElementById('editor');
+  let epoch = 0, sequence = 0, composing = false, followFrame = 0;
+  let scrollRequests = 0, scrollMoves = 0;
+  const bridge = window.chrome && window.chrome.webview;
+  function send(type, includeText = false) {
+    if (!bridge) return;
+    const message = {
+      type, epoch, sequence: ++sequence, composing,
+      focused: document.activeElement === editor,
+      readOnly: editor.readOnly,
+      scrollTop: Math.round(editor.scrollTop), scrollHeight: editor.scrollHeight,
+      clientHeight: editor.clientHeight, scrollRequests, scrollMoves
+    };
+    if (includeText) message.text = editor.value;
+    bridge.postMessage(message);
+  }
+  function follow() {
+    if (followFrame || editor.readOnly) return;
+    const requestedEpoch = epoch;
+    followFrame = requestAnimationFrame(() => {
+      followFrame = 0;
+      if (epoch !== requestedEpoch || editor.readOnly || document.activeElement !== editor) return;
+      // The browser owns the live composition and its real overflow height.
+      // Only scrollTop changes here: never value, selection, focus, or commit.
+      if (composing || editor.selectionEnd >= editor.value.length) {
+        const before = editor.scrollTop;
+        scrollRequests++;
+        editor.scrollTop = editor.scrollHeight;
+        if (editor.scrollTop !== before) scrollMoves++;
+      }
+      send('viewport');
+    });
+  }
+  function textEvent(type) {
+    send(type, true);
+    follow();
+  }
+  editor.addEventListener('compositionstart', () => { composing = true; textEvent('composition'); });
+  editor.addEventListener('compositionupdate', () => {
+    composing = true;
+    // Some Chromium IMEs update the value after compositionupdate returns.
+    // input carries the full value; this frame follows the resulting layout.
+    send('composition'); follow();
+  });
+  editor.addEventListener('input', event => {
+    if (event.isComposing) composing = true;
+    textEvent('input');
+  });
+  editor.addEventListener('compositionend', () => { composing = false; textEvent('composition'); });
+  editor.addEventListener('focus', () => send('focus'));
+  editor.addEventListener('pointerdown', () => send('pointer'));
+  editor.addEventListener('blur', () => send('focus'));
+  editor.addEventListener('scroll', () => send('viewport'));
+  editor.addEventListener('keydown', event => {
+    // Right Alt passes directly to Doubao; the page never handles it.
+    if (event.key === 'Enter' && event.ctrlKey) {
+      event.preventDefault(); send('finish', true);
+    } else if (event.key === 'Escape' && !composing) {
+      event.preventDefault(); send('close');
+    }
+  });
+  if (typeof ResizeObserver === 'function') new ResizeObserver(follow).observe(editor);
+  function command(message) {
+    if (!message || message.epoch < epoch) return;
+    if (!['reset', 'activate', 'focus'].includes(message.type)) return;
+    if (message.type === 'reset' || message.epoch !== epoch) {
+      if (followFrame) cancelAnimationFrame(followFrame);
+      followFrame = 0; epoch = message.epoch; sequence = 0; composing = false;
+      editor.value = ''; editor.scrollTop = 0;
+      scrollRequests = 0; scrollMoves = 0;
+    }
+    // Session activation unlocks typing independently of automatic focus.
+    // A real user click must work if the native host could not grant focus.
+    editor.readOnly = message.active !== true;
+    if (editor.readOnly) composing = false;
+    if (message.type === 'focus') {
+      if (!editor.readOnly) editor.focus({ preventScroll: true });
+    }
+    send('state', true);
+  }
+  if (bridge) {
+    bridge.addEventListener('message', event => command(event.data));
+    window.uuEditorReadyPing = () => bridge.postMessage({ type: 'ready' });
+    window.uuEditorReadyPing();
+  } else {
+    // The same offline page can be visually checked in a normal browser.
+    editor.readOnly = false;
+  }
+})();
+</script>
+</body>
+</html>
