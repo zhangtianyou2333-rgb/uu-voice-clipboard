@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net7.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>UUVoiceClipboard.Native</AssemblyName>
+    <RootNamespace>UUVoiceClipboard.Native</RootNamespace>
+    <Version>1.12.0</Version>
+    <ApplicationManifest Condition="'$(OS)' == 'Windows_NT'">app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Relay.ico</ApplicationIcon>
+    <Platforms>AnyCPU</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets/Relay.ico" LogicalName="UUVoiceClipboard.Native.Assets.Relay.ico" />
+    <EmbeddedResource Include="Assets/voice-editor.html" LogicalName="UUVoiceClipboard.Native.Assets.voice-editor.html" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" GeneratePathProperty="true" />
+  </ItemGroup>
+  <!-- The SDK also adds its WPF assembly. This app only hosts WinForms;
+       excluding WPF avoids an unused WindowsBase version conflict. -->
+  <Target Name="RemoveUnusedWebViewWpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+  <!-- The SDK adds its loader as Content under runtimes/. Copy it explicitly
+       after bundling, since duplicate Content links are normalized by MSBuild. -->
+  <Target Name="CopyRelayWebViewLoaderForBuild" AfterTargets="Build">
+    <Copy SourceFiles="$(PkgMicrosoft_Web_WebView2)/runtimes/win-x64/native/WebView2Loader.dll"
+          DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyRelayWebViewLoaderForPublish" AfterTargets="Publish">
+    <Copy SourceFiles="$(PkgMicrosoft_Web_WebView2)/runtimes/win-x64/native/WebView2Loader.dll"
+          DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>
