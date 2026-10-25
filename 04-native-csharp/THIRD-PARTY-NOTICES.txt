@@ -1,0 +1,13 @@
+UU 语音中转 V1.12.0 会员预览版 — 第三方组件
+
+Microsoft.Web.WebView2 1.0.4258.31
+官方：https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4258.31
+原始许可全文见源码根 LICENSES/WebView2-LICENSE.txt；运行包内包含相同许可。
+本项目引用官方 Core/WinForms SDK 和 x64 WebView2Loader.dll，未修改它们。
+WebView2 Runtime 需单独安装，适用微软运行时条款；本包不分发浏览器 Runtime。
+
+.NET / Windows Desktop Runtime 7.0.20
+自包含 Windows 程序使用对应运行时；原始许可和 notices 见 LICENSES/。
+
+本会员版已经移除 InputInterceptor 引用、Interception 驱动桥接与安装入口。
+本项目与豆包、UU 或微软均无隶属关系。识别由用户安装的输入法处理，传输由用户配置的 UU 完成；本程序不提供这些第三方服务的授权或安装包。
