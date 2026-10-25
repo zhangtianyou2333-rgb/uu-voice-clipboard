@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>UU 输入区本地回归验证</title>
+<style>
+body { background: #111416; color: #f3f5ef; font: 14px sans-serif; padding: 24px; }
+button { padding: 10px 18px; margin-right: 12px; }
+iframe { display: block; border: 1px solid #545e64; width: 510px; height: 260px; margin: 24px 0; }
+pre { white-space: pre-wrap; }
+</style>
+<h1>UU 输入区本地回归验证</h1>
+<p>运行交付包相同的 HTML。合成组合事件验证布局/协议，不代表 Windows 豆包验收。</p>
+<button id="run" disabled>运行长候选测试</button><button id="race" disabled>运行清空及焦点保护测试</button><button id="click" disabled>准备无自动焦点的点击测试</button><button id="lifecycle" disabled>运行输入解锁及迟到命令测试</button>
+<iframe id="frame" title="生产输入区"></iframe><pre id="result">加载中…</pre>
+<script>
+const frame = document.getElementById('frame'), result = document.getElementById('result');
+let epoch = 1, metrics = null, lastTextMessage = '', running = false;
+const samples = [];
+function command(type, active = type === 'focus') { frame.contentWindow.postMessage({ channel: 'test_command', data: { type, epoch, active } }, '*'); }
+function check(value, label) { if (!value) throw new Error(label); }
+function tick() { return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); }
+window.addEventListener('message', event => {
+  if (event.source !== frame.contentWindow || event.data.channel !== 'test_editor') return;
+  const message = event.data.data;
+  if (message.type === 'ready') { command('reset'); command('focus'); for(const id of ['run','race','click','lifecycle']) document.getElementById(id).disabled=false; result.textContent='输入区已就绪'; }
+  if (message.epoch === epoch) {
+    metrics = message;
+    if ('text' in message) lastTextMessage = message.text;
+  }
+});
+fetch('../../UUVoiceClipboard.Native/Assets/voice-editor.html', {cache:'no-store'}).then(response => response.text()).then(html => {
+  const mock = `<script>
+    window.chrome = {webview: {
+      postMessage: data => parent.postMessage({channel: 'test_editor', data}, '*'),
+      addEventListener: (name, handler) => window.addEventListener('message', event => {
+        if (event.source === parent && event.data.channel === 'test_command') handler({data:event.data.data});
+      })
+    }};
+  <\/script>`;
+  frame.srcdoc = html.replace('<script>', mock + '<script>');
+});
+document.getElementById('run').onclick = async () => {
+  if (running) return; running=true; samples.length=0;
+  try {
+    for (const size of [{w:510,h:260,separator:'\n'},{w:370,h:180,separator:''},{w:680,h:340,separator:''}]) {
+      frame.style.width=size.w+'px'; frame.style.height=size.h+'px'; epoch++; command('reset'); command('focus'); await tick();
+      const editor=frame.contentDocument.getElementById('editor');
+      editor.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+      let previousTop=0;
+      for (let paragraphs=1; paragraphs<=80; paragraphs++) {
+        const text=Array.from({length:paragraphs},(_,i)=>`第${i+1}段：这是不断更新的语音待确认文字。这里验证超长组合文本的滚动、完整性和光标保护。中文、emoji 🎙️、英文 Windows Mac 都应保留。`).join(size.separator);
+        editor.value=text; editor.setSelectionRange(text.length,text.length);
+        editor.dispatchEvent(new CompositionEvent('compositionupdate',{bubbles:true,data:text}));
+        editor.dispatchEvent(new InputEvent('input',{bubbles:true,data:text,inputType:'insertCompositionText',isComposing:true}));
+        await tick();
+        check(editor.value===text,'候选文本被修改');
+        check(editor.selectionStart===text.length && editor.selectionEnd===text.length,'候选选区被修改');
+        check(editor.scrollTop>=previousTop,'持续增长时出现反向跳动');
+        check(editor.scrollHeight-editor.clientHeight-editor.scrollTop<=2,'候选尾行不可见');
+        previousTop=editor.scrollTop;
+      }
+      const final=editor.value;
+      editor.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:final})); await tick();
+      check(lastTextMessage===final && metrics.composing===false,'最终提交全文或状态不一致');
+      samples.push({width:size.w,height:size.h,characters:final.length,scrollTop:editor.scrollTop,scrollHeight:editor.scrollHeight,clientHeight:editor.clientHeight,requests:metrics.scrollRequests,moves:metrics.scrollMoves});
+    }
+    result.textContent='PASS：3种尺寸，240次增长的合成待确认更新，全文/选区/尾行均通过。\n'+JSON.stringify(samples,null,2);
+  } catch(error) { result.textContent='FAIL：'+error.message; } finally { running=false; }
+};
+document.getElementById('race').onclick = async () => {
+  if(running) return; running=true;
+  try {
+    const editor=frame.contentDocument.getElementById('editor');
+    epoch++; command('reset'); command('focus'); await tick();
+    editor.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+    editor.value='正在识别的旧会话。'.repeat(600);
+    editor.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:true}));
+    epoch++; command('reset'); await tick();
+    check(editor.value==='' && editor.readOnly && editor.scrollTop===0,'清空后旧帧仍修改输入区');
+    command('focus'); await tick();
+    frame.contentWindow.focus(); editor.blur();
+    editor.value='后台测试文字。'.repeat(600); editor.scrollTop=0;
+    editor.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+    editor.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:true})); await tick();
+    check(frame.contentDocument.activeElement!==editor && editor.scrollTop===0,'后台滚动抢焦点或移动视口');
+    epoch++; command('reset'); await tick();
+    result.textContent='PASS：清空使待执行帧失效，后台输入不抢焦点，不滚动；正文清空。';
+  } catch(error) { result.textContent='FAIL：'+error.message; } finally { running=false; }
+};
+document.getElementById('click').onclick = async () => {
+  if (running) return;
+  // Reproduce a ready handshake while the host cannot grant automatic focus.
+  // Use a real pointer click and keyboard typing after this preparation.
+  epoch++; command('reset', true); await tick();
+  const editor = frame.contentDocument.getElementById('editor'); editor.blur();
+  result.textContent = `点击测试已准备：readOnly=${editor.readOnly}，focused=${frame.contentDocument.activeElement === editor}。现在点击输入区并键入测试文字。`;
+};
+document.getElementById('lifecycle').onclick = async () => {
+  if(running) return; running=true;
+  try {
+    const editor=frame.contentDocument.getElementById('editor');
+    epoch++; command('reset',true); await tick(); editor.blur();
+    check(!editor.readOnly && frame.contentDocument.activeElement!==editor,'活动会话依赖自动焦点才能解锁');
+    command('focus'); await tick();
+    const text='活动组合文本不得因解锁被改写。';
+    editor.value=text; editor.setSelectionRange(text.length,text.length);
+    editor.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+    editor.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:true})); await tick();
+    const oldEpoch=epoch; command('activate',true); await tick();
+    check(editor.value===text && editor.selectionEnd===text.length && metrics.composing,'解锁改写了活动正文、选区或组合状态');
+    epoch++; command('reset'); await tick();
+    frame.contentWindow.postMessage({channel:'test_command',data:{type:'focus',epoch:oldEpoch,active:true}},'*'); await tick();
+    check(editor.readOnly && editor.value==='','关闭后迟到focus重新解锁或恢复了正文');
+    command('activate',true); await tick();
+    check(!editor.readOnly && editor.value==='','清空后重新激活失败');
+    result.textContent='PASS：无自动焦点仍可编辑；解锁保留活动组合正文/选区；关闭后迟到焦点无效；重新打开可编辑。';
+  } catch(error) { result.textContent='FAIL：'+error.message; } finally { running=false; }
+};
+</script></html>
